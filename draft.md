@@ -101,3 +101,13 @@ You can put any other Markdown formatting here, such as:
 prompt = "blah blah"
 answer = "answer"
 +++
+
+
+@[keyword:id]
++++ doctype:section_name
++++ terminator
+
+block {
+    id, kind, sections
+    beg, end
+}

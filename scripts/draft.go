@@ -97,6 +97,24 @@ func scanLines(file *os.File) ([]string, error) {
 	return lines, nil
 }
 
+type Parser struct {
+	src     []string
+	srcPath string
+}
+
+func (p *Parser) ParseBlocks() ([]*Block, error) {
+	markers := p.scanMarkers()
+	for i, mrkr := range markers {
+		if mrkr.kind == BlockDecl {
+			block, err := p.ParseBlockDecl(mrkr)
+		}
+	}
+}
+
+func NewParser(sourcePath string, src []string) *Parser {
+	return &Parser{src: src, srcPath: sourcePath}
+}
+
 func findBlocks(sourcePath string, lines []string) ([]*Block, error) {
 	var blocks []*Block
 	var errs []error
@@ -129,8 +147,8 @@ func findBlocks(sourcePath string, lines []string) ([]*Block, error) {
 type MarkerKind = uint8
 
 const (
-	BlockMarker MarkerKind = iota
-	SectionHeader
+	BlockDecl MarkerKind = iota
+	SectionDecl
 	BlockTerminator
 	MarkerKindNone
 )
@@ -141,19 +159,78 @@ type Marker struct {
 	kind  MarkerKind
 }
 
-func scanMarkers(lines []string) []*Marker {
+type _block struct {
+	BlockSignature
+	sections []section
+	beg, end int
+}
+
+type BlockSignature struct {
+	id, kind string
+}
+
+type section struct {
+	must_panic_here
+}
+
+func (p *Parser) getLine(m *Marker) (string, error) {
+	if len(p.src) < m.index {
+		// TODO: make error fancier
+		return "", fmt.Errorf("tbd")
+	}
+	return p.src[m.index], nil
+}
+
+func unlimplementedError() error {
+	panic("unimplemented Error was returned")
+}
+
+func (p *Parser) parseBlockSignature(block_decl *Marker) (*BlockSignature, error) {
+	line, err := p.getLine(block_decl)
+	if err == nil {
+		return nil, err
+	}
+
+	if !strings.HasPrefix(line, "@[") {
+		// it is expected that the kind of block_decl is legit at the time
+		// so panic for now and implement internal error return later
+		return nil, unlimplementedError()
+	}
+
+	end := strings.Index(line, "]")
+	if end < 0 {
+		return nil, syntaxError("missing closing ]")
+	}
+
+	head := strings.TrimSpace(line[2:end])
+	if head == "" {
+		return nil, syntaxError("empty marker head")
+	}
+
+	sig, err := _parseMarkerHead(head)
+	return sig, err
+}
+
+func (p *Parser) ParseBlockDecl(block_decl *Marker) (b *Block, e error) {
+	_blk := &_block{}
+	if true {
+	}
+
+}
+
+func (p *Parser) scanMarkers() []*Marker {
 	var markers []*Marker
 	lastBlock := &Marker{index: -1, end: -1, kind: MarkerKindNone}
-	for i, line := range lines {
+	for i, line := range p.src {
 		line = strings.TrimSpace(line)
 		kind := MarkerKindNone
 		switch {
 		case line == "+++":
 			kind = BlockTerminator
 		case strings.HasPrefix(line, "@["):
-			kind = BlockMarker
+			kind = BlockDecl
 		case strings.HasPrefix(line, "+++"):
-			kind = SectionHeader
+			kind = SectionDecl
 		}
 
 		if kind == MarkerKindNone {
@@ -163,7 +240,7 @@ func scanMarkers(lines []string) []*Marker {
 		marker := &Marker{index: i, kind: kind}
 		markers = append(markers, marker)
 
-		if marker.kind == BlockMarker {
+		if marker.kind == BlockDecl {
 			lastBlock.end = marker.index
 			lastBlock = marker
 		}
@@ -229,6 +306,32 @@ func parseBlockMarker(line string) (*Block, error) {
 	}
 
 	return block, nil
+}
+
+func _parseMarkerHead(head string) (*BlockSignature, error) {
+	parts := strings.SplitN(head, ":", 2)
+
+	id := strings.TrimSpace(parts[0])
+	if !isIdent(id) {
+		return nil, syntaxError("invalid id %q: identifiers must start with a letter or underscore and contain only letters, digits, or underscores", id)
+	}
+
+	m := &BlockSignature{id: id}
+	if len(parts) == 1 {
+		return m, nil
+	}
+
+	kind := strings.TrimSpace(parts[1])
+	if !isIdent(kind) {
+		if kind == "" {
+			return nil, syntaxError("missing kind after :")
+		}
+
+		return nil, syntaxError("invalid kind %q: kind name must be a single identifier", kind)
+	}
+
+	m.kind = kind
+	return m, nil
 }
 
 func parseMarkerHead(head string) (*Block, error) {
