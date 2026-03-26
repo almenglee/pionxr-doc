@@ -1,0 +1,49 @@
+[b000]
+class = title
+title.text = "2장 파이썬의 변수와 기본자료형"
+
+[b001]
+class = example
+example.kind = "code"
+runtime.language = "python"
+runtime.version = "3.12"
+runtime.dependencies = []
+source.code = '''
+# 1. 정수 저장
+data = 10
+print(data, type(data))
+
+data = "Hello Python"
+print(data, type(data))
+
+data = 3.14
+print(data, type(data))
+'''
+source.language = "python"
+
+[b002]
+class = text
+text.format = "markdown"
+text.content = '''
+### **1.2 파이썬의 특징: 동적 타이핑 (Dynamic Typing)**
+
+파이썬은 변수를 선언할 때 자료형(int, str 등)을 미리 정하지 않음.
+변수에 값이 할당되는 시점에 실시간으로 자료형이 결정되는 방식을 **동적 타이핑**이라고 함.
+
+- **특징:** 하나의 변수에 처음에 숫자를 넣었다가, 나중에 문자열을 다시 넣는 것이 가능함.
+- **장점:** 코드가 간결하고 유연함.
+'''
+
+[b003]
+class = exercise
+exercise.kind = "poll"
+exercise.prompt = "blah blah"
+exercise.options = [
+  { id = "a", text = "aaa" },
+  { id = "b", text = "bbb" },
+  { id = "c", text = "ccc" }
+]
+exercise.answers = ["b"]
+block {
+    class
+}
