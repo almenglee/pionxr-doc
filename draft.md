@@ -1,4 +1,3 @@
-@[title:title]
 # 2장 파이썬의 변수와 기본자료형
 
 # 학습목표
@@ -17,7 +16,6 @@
 
 변수는 데이터를 저장할 수 있는 **이름이 있는 공간**입니다. 마치 **라벨이 붙은 상자**처럼, 변수에 값을 저장하고 필요할 때 불러올 수 있습니다.
 
-@[b003:example]
 
 ```python
 x = 5  # 변수 x에 5 저장
@@ -34,7 +32,6 @@ print(x + 3)  # 결과: 8
 - **특징:** 하나의 변수에 처음에 숫자를 넣었다가, 나중에 문자열을 다시 넣는 것이 가능함.
 - **장점:** 코드가 간결하고 유연함.
 
->>>runnable
 ```python
 # 1. 정수 저장
 data = 10
@@ -100,14 +97,28 @@ You can put any other Markdown formatting here, such as:
 +++ toml:data
 prompt = "blah blah"
 answer = "answer"
-+++
+
+@[choice:mcq]
++++ toml:data
+prompt = "blah blah"
+options = ["aaa","bbb","ccc"]
+answers = [0]
 
 
-@[keyword:id]
-+++ doctype:section_name
-+++ terminator
+@[choice:mcq]
++++ toml:
+prompt = "blah blah"
+options = ["aaa","bbb","ccc"]
+answers = [0]
 
-block {
-    id, kind, sections
-    beg, end
-}
+@[choice:mcq]
++++ toml:data
+prompt = "blah blah"
+options = ["aaa","bbb","ccc"]
+answers = [0]
+
+@[choice:mcq]
++++ :data
+prompt = "blah blah"
+options = ["aaa","bbb","ccc"]
+answers = [0]

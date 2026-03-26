@@ -1,4 +1,25 @@
 
+1. 문서 사양 => DRAFT, OUTPUT
+2. 생성기 에이전트 => 단계별 인스트럭션
+3. 출력기
+p1. ui/ux
+p2. 캐싱
+p3. 그래픽 모듈 => asm, os의 경우 가상 아키텍쳐, init status, steps 나열
+
+* 코드 예제 및 실행 기능
+
+태그, 블록
+@, ~@, 명시적 출력 비출력 설정
+블록 id, keywords
+
+draft -> 전처리 -> [draft blocks] -> ai -> doc
+-> rendered output
+
+draft 전처리기:
+@ 위치 수집, 위치정보를 기반으로 내용 분량 추정(줄)
+블록 id,class, hints 파싱
+
+
 1. 교육 전반 (가장 큰 시장)
 
 핵심 기능
