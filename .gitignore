@@ -1,27 +1,58 @@
-# Go build outputs
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-*.a
-*.o
-*.out
-*.test
-*.prof
-coverage.out
+# Environment files
+.env
+.env.*
+!.env.example
+!.env.sample
 
-# Project-local binaries
-/scripts/main
+# Logs
+*.log
+*.err
+*.pid
+*.pid.lock
+
+# Coverage and profiling
+coverage.out
+*.coverprofile
+*.prof
+*.trace
+
+# Compiled objects and binaries
+*.a
+*.dll
+*.dylib
+*.exe
+*.jar
+*.lib
+*.o
+*.obj
+*.out
+*.so
+*.test
+bin/
+dist/
+build/
+target/
+out/
 
 # Go workspace files
 go.work
 go.work.sum
 
-# Environment files
-.env
-.env.*
+# Dependency and tool caches
+.cache/
+.tmp/
+tmp/
+temp/
 
-# Editor and OS noise
+# Editor and IDE files
+.idea/
+.vscode/
+*.iml
+*.suo
+*.swp
+*.swo
+*~
+
+# OS files
 .DS_Store
 Thumbs.db
