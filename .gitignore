@@ -1,0 +1,27 @@
+# Go build outputs
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.a
+*.o
+*.out
+*.test
+*.prof
+coverage.out
+
+# Project-local binaries
+/scripts/main
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Environment files
+.env
+.env.*
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
