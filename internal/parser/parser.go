@@ -2,21 +2,29 @@ package parser
 
 import (
 	"fmt"
-	"pionxr-doc/internal/debug"
+	"pionxr-doc/internal/diag"
 	"strings"
 )
 
 type Parser struct {
-	src     []string
-	curr    Marker
-	markers []Marker
+	Src       []string
+	curr      Marker
+	markers   []Marker
+	collector *diag.Collector
 }
 
-func NewParser(src []string) *Parser {
+func NewParser(src []string, collector *diag.Collector) *Parser {
 	return &Parser{
-		src:  src,
-		curr: nil,
+		Src:       src,
+		curr:      nil,
+		markers:   nil,
+		collector: collector,
 	}
+}
+
+func NewParserFromString(src string, collector *diag.Collector) *Parser {
+	lines := strings.Split(src, "\n")
+	return NewParser(lines, collector)
 }
 
 func (p *Parser) got(expected MarkerKind) bool {
@@ -29,12 +37,12 @@ func (p *Parser) got(expected MarkerKind) bool {
 
 func (p *Parser) advance() error {
 	if p.curr == nil {
-		return syntaxError("unexpected end of file")
+		return p.error("unexpected end of file")
 	}
 
 	next := p.curr.cursor() + 1
 	if next >= len(p.markers) {
-		return syntaxError("unexpected end of file")
+		return p.error("unexpected end of file")
 	}
 
 	p.curr = p.markers[next]
@@ -51,14 +59,14 @@ func (p *Parser) getLine(m Marker) (string, error) {
 }
 
 func (p *Parser) _getLine(i int) (string, error) {
-	if i < 0 || i >= len(p.src) {
+	if i < 0 || i >= len(p.Src) {
 		// TODO: make error fancier
-		return "", fmt.Errorf("tbd")
+		return "", p.error("line index out of bounds")
 	}
-	return p.src[i], nil
+	return p.Src[i], nil
 }
 
-func (p *Parser) ParseBlocks() ([]*Block, error) {
+func (p *Parser) ParseBlocks() []*Block {
 	p.markers = p.scanMarkers()
 	blocks := make([]*Block, 0)
 	for _, mrkr := range p.markers {
@@ -66,13 +74,13 @@ func (p *Parser) ParseBlocks() ([]*Block, error) {
 			block_decl := mrkr.(*BlockDeclMarker)
 			block, err := p.ParseBlockDecl(block_decl)
 			if err != nil {
-				return nil, debug.UnimplementedFeature("semantic error style is not implemented yet: " + err.Error())
+				p.setPos(err, block_decl.pos())
 			}
 			blocks = append(blocks, block)
 		}
 	}
 
-	return blocks, nil
+	return blocks
 }
 
 func (p *Parser) ParseBlockDecl(block_decl *BlockDeclMarker) (block *Block, e error) {
@@ -81,14 +89,14 @@ func (p *Parser) ParseBlockDecl(block_decl *BlockDeclMarker) (block *Block, e er
 
 	sig, err := p.parseBlockSignature(block_decl)
 	if err != nil {
-		return nil, err
+		return nil, p.setPos(err, block_decl.pos())
 	}
 
 	block.Sig = sig
 
 	err = p.ParseSectionList(block)
 	if err != nil {
-		debug.Warn(fmt.Sprintf("failed to parse section list for block %q: %v", block.Sig.ID, err))
+		p.warningAt(block.Marker.pos(), fmt.Sprintf("failed to parse section list for block %q: %v", block.Sig.ID, err))
 	}
 	block.End = block.Marker._upperBound
 	block.resolveSectionEnds()
@@ -98,76 +106,74 @@ func (p *Parser) ParseBlockDecl(block_decl *BlockDeclMarker) (block *Block, e er
 
 func (p *Parser) parseBlockSignature(block_decl *BlockDeclMarker) (*Signature, error) {
 	line, err := p.getLine(block_decl)
+	pos := block_decl.pos()
 	if err != nil {
-		return nil, err
+		return nil, p.setPos(err, pos)
 	}
 
 	if !strings.HasPrefix(line, "@[") {
-		// it is expected that the kind of block_decl is legit at the time
-		// so panic for now and implement internal error return later
-		return nil, debug.UnimplementedFeature("parseBlockSignature is not implemented yet")
+		return nil, p.internalFailureAt(pos, "blockDecl without @[ prefix")
 	}
 
 	end := strings.Index(line, "]")
 	if end < 0 {
-		return nil, syntaxError("missing closing ]")
+		return nil, p.syntaxErrorAt(pos, "missing closing ]")
 	}
 
 	head := strings.TrimSpace(line[2:end])
 	if head == "" {
-		return nil, syntaxError("empty marker head")
+		return nil, p.syntaxErrorAt(pos, "empty marker head")
 	}
 
-	sig, err := parseMarkerHead(head)
-	return sig, err
+	sig, err := p.parseMarkerHead(head)
+	return sig, p.setPos(err, pos)
 }
 
 func (p *Parser) ParseSectionList(parent *Block) (err error) {
 	p.locate(parent.Marker)
 	if err := p.advance(); err != nil {
-		return debug.Bug(err.Error())
+		return p.setPos(err, parent.Marker.pos())
 	}
 	// case: update block termination point
 	if !p.got(SectionDecl) {
 		parent.Marker.setUpperBound(p.curr.begin())
-		return syntaxError("expected section declaration after block declaration")
+		return p.syntaxErrorAt(parent.Marker.pos(), "expected section declaration after block declaration")
 	}
 
 	for p.got(SectionDecl) {
 		var sec *Section
-		sec, err = p.parseSectionDecl()
+		sdecl, ok := p.curr.(*SectionDeclMarker)
+		if !ok {
+			return p.internalFailureAt(sdecl.pos(), "unexpected marker type, expected SectionDeclMarker")
+		}
+		sec, err = p.parseSectionDecl(sdecl)
 		if err != nil {
 			parent.Marker.setUpperBound(p.curr.begin())
 			break
 		}
 		parent.Sections = append(parent.Sections, sec)
 		if err := p.advance(); err != nil {
-			return debug.Bug(err.Error())
+			return p.internalFailureAt(Pos{line: sec.End}, err.Error())
 		}
 	}
 
 	if !p.got(BlockTerminator) {
-		return syntaxError("block is not properly terminated with +++")
+		return p.syntaxErrorAt(parent.Marker.pos(), "block is not properly terminated with +++")
 	}
 
 	return err
 }
 
-func (p *Parser) parseSectionDecl() (*Section, error) {
-	marker, ok := p.curr.(*SectionDeclMarker)
-	if !ok {
-		return nil, debug.Bug("current marker is not SectionDeclMarker")
-	}
-
+func (p *Parser) parseSectionDecl(marker *SectionDeclMarker) (*Section, error) {
 	line, err := p.getLine(marker)
 	if err != nil {
-		return nil, debug.Bug(err.Error())
+		return nil, p.setPos(err, marker.pos())
 	}
 
 	head := strings.TrimSpace(line[3:])
-	sig, err := parseMarkerHead(head)
+	sig, err := p.parseMarkerHead(head)
 	if err != nil {
-		return nil, err
+		return nil, p.setPos(err, marker.pos())
 	}
 
 	sec := &Section{
@@ -183,7 +189,7 @@ func (p *Parser) scanMarkers() []Marker {
 	var lastBlock *BlockDeclMarker
 	cnt := 0
 	var marker Marker
-	for i, line := range p.src {
+	for i, line := range p.Src {
 		line = strings.TrimSpace(line)
 
 		switch getMarkerKind(line) {
@@ -210,8 +216,8 @@ func (p *Parser) scanMarkers() []Marker {
 
 	}
 
-	lastBlock.setUpperBound(len(p.src))
+	lastBlock.setUpperBound(len(p.Src))
 
-	markers = append(markers, NewEOFMarker(len(p.src), cnt))
+	markers = append(markers, NewEOFMarker(len(p.Src), cnt))
 	return markers
 }

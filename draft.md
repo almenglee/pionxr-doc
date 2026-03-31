@@ -115,11 +115,17 @@ answers = [0]
 prompt = "blah blah"
 options = ["aaa","bbb","ccc"]
 answers = [0]
++++ toml:data
+prompt = "blah blah"
+options = ["aaa","bbb","ccc"]
+answers = [0]
++++
 
 @[choice:mcq]
 +++ :data
 prompt = "blah blah"
 options = ["aaa","bbb","ccc"]
 answers = [0]
+
 
 @[choice:mcq]

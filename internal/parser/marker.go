@@ -61,13 +61,7 @@ type _marker struct {
 func (m _marker) cursor() int      { return m._cursor }
 func (m _marker) begin() int       { return m._begin }
 func (m _marker) kind() MarkerKind { return m._kind }
-
-func (m _marker) assertKind(expected MarkerKind) error {
-	if m._kind != expected {
-		return syntaxError("unexpected marker of kind %v, expected %v", m._kind, expected)
-	}
-	return nil
-}
+func (m _marker) pos() Pos         { return Pos{line: m._begin} }
 
 type BlockDeclMarker struct {
 	_marker
@@ -100,14 +94,6 @@ func NewBlockTerminatorMarker(begin, index int) *BlockTerminatorMarker {
 
 func NewEOFMarker(begin, index int) *EOFMarker {
 	return &EOFMarker{_marker: _marker{_begin: begin, _cursor: index, _kind: EOF}}
-}
-
-func (m BlockDeclMarker) String() string {
-	return fmt.Sprintf("BlockDeclMarker{begin=%d cursor=%d upper_bound=%d}", m._begin, m._cursor, m._upperBound)
-}
-
-func (m SectionDeclMarker) String() string {
-	return fmt.Sprintf("SectionDeclMarker{begin=%d cursor=%d}", m._begin, m._cursor)
 }
 
 func (bdecl *BlockDeclMarker) setUpperBound(upper int) {

@@ -1,13 +1,28 @@
 package dto
 
-import "pionxr-doc/internal/parser"
+import (
+	"encoding/json"
+	"io"
+)
+
+type Result struct {
+	Ok     bool     `json:"ok"`
+	Blocks []*Block `json:"blocks"`
+	Errors []*Error `json:"errors"`
+}
+
+type Error struct {
+	Message string `json:"message"`
+	Level   string `json:"level"`
+	Pos     string `json:"pos,omitempty"`
+}
 
 type Block struct {
-	Kind     string             `json:"kind"`
-	ID       string             `json:"id"`
-	Beg      int                `json:"beg"`
-	End      int                `json:"end"`
-	Sections map[string]Section `json:"sections"`
+	Kind     string              `json:"kind"`
+	ID       string              `json:"id"`
+	Beg      int                 `json:"beg"`
+	End      int                 `json:"end"`
+	Sections map[string]*Section `json:"sections"`
 }
 
 type Section struct {
@@ -15,20 +30,8 @@ type Section struct {
 	Raw  string `json:"raw"`
 }
 
-func FromParserBlock(pb *parser.Block) Block {
-	sections := make(map[string]Section)
-	for _, sec := range pb.Sections {
-		sections[sec.Sig.ID] = Section{
-			Kind: sec.Sig.Kind,
-			Raw:  sec.Raw,
-		}
-	}
-
-	return Block{
-		Kind:     pb.Sig.Kind,
-		ID:       pb.Sig.ID,
-		Beg:      pb.Beg,
-		End:      pb.End,
-		Sections: sections,
-	}
+func (d *Result) EncodeJSON(w io.Writer) error {
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	return enc.Encode(d)
 }
