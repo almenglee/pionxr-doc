@@ -167,7 +167,6 @@ func (s Section) String() string {
 
 type Parser struct {
 	src     []string
-	srcPath string
 	curr    Marker
 	markers []Marker
 }
@@ -175,7 +174,7 @@ type Parser struct {
 func (p *Parser) buildSections(b *Block) {
 	defer func() {
 		if r := recover(); r != nil {
-			fatal(fmt.Sprintf("failed to build sections for block %q: %v", b.Sig.ID, r))
+			bug(fmt.Sprintf("failed to build sections for block %q: %v", b.Sig.ID, r))
 		}
 	}()
 	for _, sec := range b.Sections {
@@ -231,7 +230,7 @@ func (p *Parser) ParseBlocks() ([]*Block, error) {
 			block_decl := mrkr.(*BlockDeclMarker)
 			block, err := p.ParseBlockDecl(block_decl)
 			if err != nil {
-				return nil, unimplementedError("semantic error style is not implemented yet: " + err.Error())
+				return nil, unimplementedFeature("semantic error style is not implemented yet: " + err.Error())
 			}
 			blocks = append(blocks, block)
 		}
@@ -240,11 +239,10 @@ func (p *Parser) ParseBlocks() ([]*Block, error) {
 	return blocks, nil
 }
 
-func NewParser(sourcePath string, src []string) *Parser {
+func NewParser(src []string) *Parser {
 	return &Parser{
-		src:     src,
-		srcPath: sourcePath,
-		curr:    nil,
+		src:  src,
+		curr: nil,
 	}
 }
 
@@ -257,7 +255,7 @@ func (p *Parser) parseBlockSignature(block_decl *BlockDeclMarker) (*Signature, e
 	if !strings.HasPrefix(line, "@[") {
 		// it is expected that the kind of block_decl is legit at the time
 		// so panic for now and implement internal error return later
-		return nil, unimplementedError("parseBlockSignature is not implemented yet")
+		return nil, unimplementedFeature("parseBlockSignature is not implemented yet")
 	}
 
 	end := strings.Index(line, "]")
@@ -298,7 +296,7 @@ func (p *Parser) ParseBlockDecl(block_decl *BlockDeclMarker) (block *Block, e er
 func (p *Parser) ParseSectionList(parent *Block) (err error) {
 	p.locate(parent.Marker)
 	if err := p.advance(); err != nil {
-		return fatal(err.Error())
+		return bug(err.Error())
 	}
 	// case: update block termination point
 	if !p.got(SectionDecl) {
@@ -315,7 +313,7 @@ func (p *Parser) ParseSectionList(parent *Block) (err error) {
 		}
 		parent.Sections = append(parent.Sections, sec)
 		if err := p.advance(); err != nil {
-			return fatal(err.Error())
+			return bug(err.Error())
 		}
 	}
 
@@ -329,12 +327,12 @@ func (p *Parser) ParseSectionList(parent *Block) (err error) {
 func (p *Parser) parseSectionDecl() (*Section, error) {
 	marker, ok := p.curr.(*SectionDeclMarker)
 	if !ok {
-		return nil, fatal("current marker is not SectionDeclMarker")
+		return nil, bug("current marker is not SectionDeclMarker")
 	}
 
 	line, err := p.getLine(marker)
 	if err != nil {
-		return nil, fatal(err.Error())
+		return nil, bug(err.Error())
 	}
 
 	head := strings.TrimSpace(line[3:])

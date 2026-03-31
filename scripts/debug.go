@@ -2,12 +2,16 @@
 
 package main
 
-func unimplementedError(msg string) error {
+func unimplementedFeature(msg string) error {
 	panic("unimplemented error: " + msg)
 }
 
-func fatal(msg string) error {
-	panic("fatal program error: " + msg)
+func undecidedError(msg string) error {
+	panic("undecided error: " + msg)
+}
+
+func bug(msg string) error {
+	panic("bug: " + msg)
 }
 
 func warn(msg string) {
