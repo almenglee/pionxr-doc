@@ -7,7 +7,7 @@ func unimplementedError(msg string) error {
 }
 
 func fatal(msg string) error {
-	panic("fatal error: " + msg)
+	panic("fatal program error: " + msg)
 }
 
 func warn(msg string) {

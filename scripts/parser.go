@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -103,34 +104,65 @@ func (bdecl *BlockDeclMarker) setUpperBound(upper int) {
 	bdecl._upperBound = upper
 }
 
-type BlockSignature struct {
-	kind, id string
+type Signature struct {
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
 }
 
-func (b *BlockSignature) String() string {
-	if b.id == "" {
-		return fmt.Sprintf("BlockSignature{kind=%q}", b.kind)
+func (b *Signature) String() string {
+	if b.ID == "" {
+		return fmt.Sprintf("BlockSignature{kind=%q}", b.Kind)
 	}
-	return fmt.Sprintf("BlockSignature{id=%q kind=%q}", b.id, b.kind)
+	return fmt.Sprintf("BlockSignature{id=%q kind=%q}", b.ID, b.Kind)
 }
 
 type Block struct {
-	sig      *BlockSignature
-	marker   *BlockDeclMarker
-	sections []section
+	Sig      *Signature `json:"sig"`
+	Beg      int        `json:"begin"`
+	End      int        `json:"end"`
+	Sections []*Section `json:"sections"`
+
+	Marker *BlockDeclMarker `json:"-"`
+}
+
+type Section struct {
+	Sig *Signature `json:"sig"`
+	Beg int        `json:"begin"`
+	End int        `json:"end"`
+	Raw string     `json:"raw"`
+
+	Marker *SectionDeclMarker `json:"-"`
+}
+
+func (b *Block) Serialize() string {
+	// Marshal the Go struct into a JSON byte slice
+	jsonData, err := json.Marshal(b)
+	if err != nil {
+		fmt.Println("error:", err)
+		return ""
+	}
+	return string(jsonData)
 }
 
 func (b Block) String() string {
-	return fmt.Sprintf("Block{"+b.sig.String()+", "+b.marker.String()+", %v}", b.sections)
+	return fmt.Sprintf("Block{"+b.Sig.String()+", "+b.Marker.String()+", %v, end=%d }", b.Sections, b.End)
 }
 
-type section struct {
-	sig    *BlockSignature
-	marker *SectionDeclMarker
+func (b *Block) resolveSectionEnds() {
+	for i := range b.Sections {
+		if i+1 < len(b.Sections) {
+			b.Sections[i].End = b.Sections[i+1].Marker.begin()
+		} else {
+			b.Sections[i].End = b.End
+		}
+	}
 }
 
-func (s section) String() string {
-	return fmt.Sprintf("Section{" + s.sig.String() + " " + s.marker.String() + "}")
+func (s Section) String() string {
+	if s.Raw != "" {
+		return fmt.Sprintf("Section{"+s.Sig.String()+", "+s.Marker.String()+", end=%d, raw=%q}", s.End, s.Raw)
+	}
+	return fmt.Sprintf("Section{"+s.Sig.String()+", "+s.Marker.String()+", end=%d}", s.End)
 }
 
 type Parser struct {
@@ -138,6 +170,18 @@ type Parser struct {
 	srcPath string
 	curr    Marker
 	markers []Marker
+}
+
+func (p *Parser) buildSections(b *Block) {
+	defer func() {
+		if r := recover(); r != nil {
+			fatal(fmt.Sprintf("failed to build sections for block %q: %v", b.Sig.ID, r))
+		}
+	}()
+	for _, sec := range b.Sections {
+		lines := p.src[sec.Marker.begin()+1 : sec.End]
+		sec.Raw = strings.Join(lines, "\n")
+	}
 }
 
 func (p *Parser) got(expected MarkerKind) bool {
@@ -204,7 +248,7 @@ func NewParser(sourcePath string, src []string) *Parser {
 	}
 }
 
-func (p *Parser) parseBlockSignature(block_decl *BlockDeclMarker) (*BlockSignature, error) {
+func (p *Parser) parseBlockSignature(block_decl *BlockDeclMarker) (*Signature, error) {
 	line, err := p.getLine(block_decl)
 	if err != nil {
 		return nil, err
@@ -232,42 +276,44 @@ func (p *Parser) parseBlockSignature(block_decl *BlockDeclMarker) (*BlockSignatu
 
 func (p *Parser) ParseBlockDecl(block_decl *BlockDeclMarker) (block *Block, e error) {
 	// TODO: warning: ParseBlockDecl is still a stub and currently returns unimplementedError.
-	block = &Block{marker: block_decl}
+	block = &Block{Marker: block_decl, Beg: block_decl.begin()}
 
 	sig, err := p.parseBlockSignature(block_decl)
 	if err != nil {
 		return nil, err
 	}
 
-	block.sig = sig
+	block.Sig = sig
 
 	err = p.ParseSectionList(block)
 	if err != nil {
-		warn(fmt.Sprintf("failed to parse section list for block %q: %v", block.sig.id, err))
+		warn(fmt.Sprintf("failed to parse section list for block %q: %v", block.Sig.ID, err))
 	}
+	block.End = block.Marker._upperBound
+	block.resolveSectionEnds()
 
 	return block, nil
 }
 
 func (p *Parser) ParseSectionList(parent *Block) (err error) {
-	p.locate(parent.marker)
+	p.locate(parent.Marker)
 	if err := p.advance(); err != nil {
 		return fatal(err.Error())
 	}
 	// case: update block termination point
 	if !p.got(SectionDecl) {
-		parent.marker.setUpperBound(p.curr.begin())
+		parent.Marker.setUpperBound(p.curr.begin())
 		return syntaxError("expected section declaration after block declaration")
 	}
 
 	for p.got(SectionDecl) {
-		var sec *section
+		var sec *Section
 		sec, err = p.parseSectionDecl()
 		if err != nil {
-			parent.marker.setUpperBound(p.curr.begin())
+			parent.Marker.setUpperBound(p.curr.begin())
 			break
 		}
-		parent.sections = append(parent.sections, *sec)
+		parent.Sections = append(parent.Sections, sec)
 		if err := p.advance(); err != nil {
 			return fatal(err.Error())
 		}
@@ -280,7 +326,7 @@ func (p *Parser) ParseSectionList(parent *Block) (err error) {
 	return err
 }
 
-func (p *Parser) parseSectionDecl() (*section, error) {
+func (p *Parser) parseSectionDecl() (*Section, error) {
 	marker, ok := p.curr.(*SectionDeclMarker)
 	if !ok {
 		return nil, fatal("current marker is not SectionDeclMarker")
@@ -297,9 +343,10 @@ func (p *Parser) parseSectionDecl() (*section, error) {
 		return nil, err
 	}
 
-	sec := &section{
-		sig:    sig,
-		marker: marker,
+	sec := &Section{
+		Sig:    sig,
+		Beg:    marker.begin(),
+		Marker: marker,
 	}
 	return sec, nil
 }
@@ -356,15 +403,17 @@ func (p *Parser) scanMarkers() []Marker {
 	return markers
 }
 
-func parseMarkerHead(head string) (*BlockSignature, error) {
+func parseMarkerHead(head string) (*Signature, error) {
 	parts := strings.SplitN(head, ":", 2)
 
 	kind := strings.TrimSpace(parts[0])
 	if !isIdent(kind) {
+		// TODO: rewind block end
+		println("warning: invalid kind in marker head, treating it as no kind")
 		return nil, syntaxError("invalid kind %q: kind name must be a single identifier", kind)
 	}
 
-	m := &BlockSignature{kind: kind}
+	m := &Signature{Kind: kind}
 	if len(parts) == 1 {
 		return m, nil
 	}
@@ -372,13 +421,15 @@ func parseMarkerHead(head string) (*BlockSignature, error) {
 	id := strings.TrimSpace(parts[1])
 	if !isIdent(id) {
 		if id == "" {
+			// TODO: rewind block end
+			println("warning: missing id after : in marker head, treating it as no id")
 			return nil, syntaxError("missing id after :")
 		}
 
 		return nil, syntaxError("invalid id %q: id must be a single identifier", id)
 	}
 
-	m.kind = kind
-	m.id = id
+	m.Kind = kind
+	m.ID = id
 	return m, nil
 }

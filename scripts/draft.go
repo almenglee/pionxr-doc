@@ -19,10 +19,11 @@ func main() {
 	}
 
 	for _, block := range blocks {
+		parser.buildSections(block)
 		fmt.Println(block)
 	}
+	for _, block := range blocks {
+		fmt.Println(block.Serialize())
+	}
 
-	// for _, block := range blocks {
-	// 	fmt.Println(block.Serialize())
-	// }
 }
