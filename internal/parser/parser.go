@@ -1,170 +1,10 @@
 package parser
 
 import (
-	"encoding/json"
 	"fmt"
 	"pionxr-doc/internal/debug"
 	"strings"
 )
-
-type MarkerKind uint8
-
-const (
-	EOF MarkerKind = iota
-	BlockDecl
-	SectionDecl
-	BlockTerminator
-	RawText
-)
-
-func (k MarkerKind) String() string {
-	switch k {
-	case EOF:
-		return "EOF"
-	case BlockDecl:
-		return "BlockDecl"
-	case SectionDecl:
-		return "SectionDecl"
-	case BlockTerminator:
-		return "BlockTerminator"
-	case RawText:
-		return "MarkerKindNone"
-	default:
-		return "MarkerKind(" + fmt.Sprint(uint8(k)) + ")"
-	}
-}
-
-type Marker interface {
-	cursor() int
-	begin() int
-	kind() MarkerKind
-}
-
-type _marker struct {
-	_cursor int
-	_begin  int
-	_kind   MarkerKind
-}
-
-func (m _marker) cursor() int      { return m._cursor }
-func (m _marker) begin() int       { return m._begin }
-func (m _marker) kind() MarkerKind { return m._kind }
-
-func (m _marker) assertKind(expected MarkerKind) error {
-	if m._kind != expected {
-		return syntaxError("unexpected marker of kind %v, expected %v", m._kind, expected)
-	}
-	return nil
-}
-
-type BlockDeclMarker struct {
-	_marker
-	_upperBound int
-}
-
-func (m BlockDeclMarker) String() string {
-	return fmt.Sprintf("BlockDeclMarker{begin=%d cursor=%d upper_bound=%d}", m._begin, m._cursor, m._upperBound)
-}
-
-type SectionDeclMarker struct {
-	_marker
-}
-
-func (m SectionDeclMarker) String() string {
-	return fmt.Sprintf("SectionDeclMarker{begin=%d cursor=%d}", m._begin, m._cursor)
-}
-
-type BlockTerminatorMarker struct {
-	_marker
-}
-
-type EOFMarker struct {
-	_marker
-}
-
-func NewBlockDeclMarker(begin, index int) *BlockDeclMarker {
-	return &BlockDeclMarker{_marker: _marker{_begin: begin, _cursor: index, _kind: BlockDecl}}
-}
-
-func NewSectionDeclMarker(begin, index int) *SectionDeclMarker {
-	return &SectionDeclMarker{_marker: _marker{_begin: begin, _cursor: index, _kind: SectionDecl}}
-}
-
-func NewBlockTerminatorMarker(begin, index int) *BlockTerminatorMarker {
-	return &BlockTerminatorMarker{_marker: _marker{_begin: begin, _cursor: index, _kind: BlockTerminator}}
-}
-
-func NewEOFMarker(begin, index int) *EOFMarker {
-	return &EOFMarker{_marker: _marker{_begin: begin, _cursor: index, _kind: EOF}}
-}
-
-func (bdecl *BlockDeclMarker) setUpperBound(upper int) {
-	if bdecl == nil {
-		return
-	}
-	bdecl._upperBound = upper
-}
-
-type Signature struct {
-	Kind string `json:"kind"`
-	ID   string `json:"id"`
-}
-
-func (b *Signature) String() string {
-	if b.ID == "" {
-		return fmt.Sprintf("BlockSignature{kind=%q}", b.Kind)
-	}
-	return fmt.Sprintf("BlockSignature{id=%q kind=%q}", b.ID, b.Kind)
-}
-
-type Block struct {
-	Sig      *Signature `json:"sig"`
-	Beg      int        `json:"begin"`
-	End      int        `json:"end"`
-	Sections []*Section `json:"sections"`
-
-	Marker *BlockDeclMarker `json:"-"`
-}
-
-type Section struct {
-	Sig *Signature `json:"sig"`
-	Beg int        `json:"begin"`
-	End int        `json:"end"`
-	Raw string     `json:"raw"`
-
-	Marker *SectionDeclMarker `json:"-"`
-}
-
-func (b *Block) Serialize() string {
-	// Marshal the Go struct into a JSON byte slice
-	jsonData, err := json.Marshal(b)
-	if err != nil {
-		fmt.Println("error:", err)
-		return ""
-	}
-	return string(jsonData)
-}
-
-func (b Block) String() string {
-	return fmt.Sprintf("Block{"+b.Sig.String()+", "+b.Marker.String()+", %v, end=%d }", b.Sections, b.End)
-}
-
-func (b *Block) resolveSectionEnds() {
-	for i := range b.Sections {
-		if i+1 < len(b.Sections) {
-			b.Sections[i].End = b.Sections[i+1].Marker.begin()
-		} else {
-			b.Sections[i].End = b.End
-		}
-	}
-}
-
-func (s Section) String() string {
-	if s.Raw != "" {
-		return fmt.Sprintf("Section{"+s.Sig.String()+", "+s.Marker.String()+", end=%d, raw=%q}", s.End, s.Raw)
-	}
-	return fmt.Sprintf("Section{"+s.Sig.String()+", "+s.Marker.String()+", end=%d}", s.End)
-}
 
 type Parser struct {
 	src     []string
@@ -172,15 +12,10 @@ type Parser struct {
 	markers []Marker
 }
 
-func (p *Parser) BuildSections(b *Block) {
-	defer func() {
-		if r := recover(); r != nil {
-			debug.Bug(fmt.Sprintf("failed to build sections for block %q: %v", b.Sig.ID, r))
-		}
-	}()
-	for _, sec := range b.Sections {
-		lines := p.src[sec.Marker.begin()+1 : sec.End]
-		sec.Raw = strings.Join(lines, "\n")
+func NewParser(src []string) *Parser {
+	return &Parser{
+		src:  src,
+		curr: nil,
 	}
 }
 
@@ -240,11 +75,25 @@ func (p *Parser) ParseBlocks() ([]*Block, error) {
 	return blocks, nil
 }
 
-func NewParser(src []string) *Parser {
-	return &Parser{
-		src:  src,
-		curr: nil,
+func (p *Parser) ParseBlockDecl(block_decl *BlockDeclMarker) (block *Block, e error) {
+	// TODO: warning: ParseBlockDecl is still a stub and currently returns unimplementedError.
+	block = &Block{Marker: block_decl, Beg: block_decl.begin()}
+
+	sig, err := p.parseBlockSignature(block_decl)
+	if err != nil {
+		return nil, err
 	}
+
+	block.Sig = sig
+
+	err = p.ParseSectionList(block)
+	if err != nil {
+		debug.Warn(fmt.Sprintf("failed to parse section list for block %q: %v", block.Sig.ID, err))
+	}
+	block.End = block.Marker._upperBound
+	block.resolveSectionEnds()
+
+	return block, nil
 }
 
 func (p *Parser) parseBlockSignature(block_decl *BlockDeclMarker) (*Signature, error) {
@@ -271,27 +120,6 @@ func (p *Parser) parseBlockSignature(block_decl *BlockDeclMarker) (*Signature, e
 
 	sig, err := parseMarkerHead(head)
 	return sig, err
-}
-
-func (p *Parser) ParseBlockDecl(block_decl *BlockDeclMarker) (block *Block, e error) {
-	// TODO: warning: ParseBlockDecl is still a stub and currently returns unimplementedError.
-	block = &Block{Marker: block_decl, Beg: block_decl.begin()}
-
-	sig, err := p.parseBlockSignature(block_decl)
-	if err != nil {
-		return nil, err
-	}
-
-	block.Sig = sig
-
-	err = p.ParseSectionList(block)
-	if err != nil {
-		debug.Warn(fmt.Sprintf("failed to parse section list for block %q: %v", block.Sig.ID, err))
-	}
-	block.End = block.Marker._upperBound
-	block.resolveSectionEnds()
-
-	return block, nil
 }
 
 func (p *Parser) ParseSectionList(parent *Block) (err error) {
@@ -350,20 +178,6 @@ func (p *Parser) parseSectionDecl() (*Section, error) {
 	return sec, nil
 }
 
-func getMarkerKind(line string) (kind MarkerKind) {
-	switch {
-	case line == "+++":
-		kind = BlockTerminator
-	case strings.HasPrefix(line, "@["):
-		kind = BlockDecl
-	case strings.HasPrefix(line, "+++"):
-		kind = SectionDecl
-	default:
-		kind = RawText
-	}
-	return
-}
-
 func (p *Parser) scanMarkers() []Marker {
 	var markers []Marker
 	var lastBlock *BlockDeclMarker
@@ -400,35 +214,4 @@ func (p *Parser) scanMarkers() []Marker {
 
 	markers = append(markers, NewEOFMarker(len(p.src), cnt))
 	return markers
-}
-
-func parseMarkerHead(head string) (*Signature, error) {
-	parts := strings.SplitN(head, ":", 2)
-
-	kind := strings.TrimSpace(parts[0])
-	if !isIdent(kind) {
-		// TODO: rewind block end
-		println("warning: invalid kind in marker head, treating it as no kind")
-		return nil, syntaxError("invalid kind %q: kind name must be a single identifier", kind)
-	}
-
-	m := &Signature{Kind: kind}
-	if len(parts) == 1 {
-		return m, nil
-	}
-
-	id := strings.TrimSpace(parts[1])
-	if !isIdent(id) {
-		if id == "" {
-			// TODO: rewind block end
-			println("warning: missing id after : in marker head, treating it as no id")
-			return nil, syntaxError("missing id after :")
-		}
-
-		return nil, syntaxError("invalid id %q: id must be a single identifier", id)
-	}
-
-	m.Kind = kind
-	m.ID = id
-	return m, nil
 }
